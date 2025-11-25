@@ -1,4 +1,3 @@
-flask
+Flask
+gunicorn
 youtube-transcript-api
-requests
-beautifulsoup4
