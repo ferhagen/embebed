@@ -146,6 +146,7 @@ def _parrafos_html(lineas):
 # -------------------------------------------------
 def obtener_subtitulos(url):
     try:
+        # 🔥 OPCIONES CORREGIDAS PARA RENDER + YOUTUBE
         ydl_opts = {
             "quiet": True,
             "skip_download": True,
@@ -153,6 +154,12 @@ def obtener_subtitulos(url):
             "writesubtitles": True,
             "writeautomaticsub": True,
             "subtitleslangs": ["es", "es-419", "es-ES", "es-LA", "en"],
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["web", "default"]
+                }
+            },
+            "force_generic_extractor": True
         }
 
         with YoutubeDL(ydl_opts) as ydl:
@@ -257,10 +264,17 @@ def procesar():
     # OBTENER METADATOS
     # -------------------------------------------------
     try:
+        # 🔥 OPCIONES CORREGIDAS (misma lógica)
         ydl_opts = {
-            'quiet': True,
-            'skip_download': True,
-            'nocheckcertificate': True
+            "quiet": True,
+            "skip_download": True,
+            "nocheckcertificate": True,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["web", "default"]
+                }
+            },
+            "force_generic_extractor": True
         }
 
         with YoutubeDL(ydl_opts) as ydl:
@@ -299,7 +313,6 @@ def procesar():
     # -------------------------------------------------
     referencia_html = f"""
 <br>
-<!--Referencia-->
 <div class="linkd40-video bg-blue-l2 d40-border-blue">
     <div class="linkd40-video-s1">
         <span class="linkd40-textbox-badge bg-blue">
@@ -323,7 +336,6 @@ def procesar():
         frameborder="0" class="video-d401" allowfullscreen>
 </iframe>
 
-<!--Transcripción-->
 <div class="accordion accordion-d401" id="accordionTranscripcion">
     <div class="accordion-item">
         <h3 class="accordion-header">
