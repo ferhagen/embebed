@@ -1,8 +1,7 @@
 from flask import Flask, render_template, request, jsonify
 import re
 import requests
-from html import unescape
-from yt_dlp import YoutubeDL
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 
 app = Flask(__name__)
 
@@ -50,13 +49,12 @@ def _parrafos_html(lineas):
     parrafos = []
 
     # -------------------------------------------------
-    # A) SI HAY PUNTUACIÓN → AGRUPAR POR FRASES
+    # A) SI HAY PUNTUACIÓN
     # -------------------------------------------------
     if tiene_puntuacion:
         frases = re.split(r'(?<=[\.\?\!])\s+', texto)
         frases = [f.strip() for f in frases if f.strip()]
 
-        # Dividir frases demasiado largas
         frases_procesadas = []
         for f in frases:
             palabras = f.split()
@@ -76,7 +74,6 @@ def _parrafos_html(lineas):
             temp.append(frase)
             actual += len(frase.split())
 
-            # Límite seguro
             if actual >= 60:
                 bloque = " ".join(temp).strip()
                 bloque = capitalizar_parrafo(bloque)
@@ -90,7 +87,7 @@ def _parrafos_html(lineas):
             parrafos.append(bloque)
 
     # -------------------------------------------------
-    # B) SUBTÍTULOS AUTOMÁTICOS SIN PUNTUACIÓN
+    # B) SUBTÍTULOS SIN PUNTUACIÓN
     # -------------------------------------------------
     else:
         temp = []
@@ -131,9 +128,6 @@ def _parrafos_html(lineas):
             bloque = capitalizar_parrafo(bloque)
             parrafos.append(bloque)
 
-    # -------------------------------------------------
-    # SIEMPRE insertar <p></p> entre párrafos
-    # -------------------------------------------------
     html = ""
     for p in parrafos:
         html += f"<p>{p}</p>\n<p></p>\n"
@@ -142,105 +136,42 @@ def _parrafos_html(lineas):
 
 
 # -------------------------------------------------
-#   Obtener subtítulos VTT o JSON pb3
+#   Obtener subtítulos con youtube-transcript-api
 # -------------------------------------------------
-def obtener_subtitulos(url):
+def obtener_subtitulos(video_id):
     try:
-        # 🔥 OPCIONES CORREGIDAS PARA RENDER + YOUTUBE
-        ydl_opts = {
-            "quiet": True,
-            "skip_download": True,
-            "nocheckcertificate": True,
-            "writesubtitles": True,
-            "writeautomaticsub": True,
-            "subtitleslangs": ["es", "es-419", "es-ES", "es-LA", "en"],
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["web", "default"]
-                }
-            },
-            "force_generic_extractor": True
-        }
-
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-
-        subs = info.get("subtitles") or {}
-        auto = info.get("automatic_captions") or {}
-
-        preferidos = ["es", "es-419", "es-ES", "es-LA", "en"]
-
-        url_sub = None
-
-        # Manuales
-        for lang in preferidos:
-            if lang in subs and subs[lang]:
-                url_sub = subs[lang][0].get("url")
-                break
-
-        # Automáticos
-        if not url_sub:
-            for lang in preferidos:
-                if lang in auto and auto[lang]:
-                    url_sub = auto[lang][0].get("url")
-                    break
-
-        if not url_sub:
-            return "<p>❌ Este video no tiene subtítulos disponibles.</p>"
-
-        # Descargar archivo de subtítulos
-        resp = requests.get(url_sub)
-        text = resp.text.strip()
-
-        lineas = []
-
-        # ---------------------------------------------------------
-        # CASO 1: VTT tradicional
-        # ---------------------------------------------------------
-        if text.startswith("WEBVTT"):
-            raw = text.splitlines()
-            for l in raw:
-                l = l.strip()
-                if not l:
-                    continue
-                if l.upper().startswith("WEBVTT"):
-                    continue
-                if re.match(r"^\d+$", l):
-                    continue
-                if "-->" in l:
-                    continue
-                texto = limpiar_basura(l)
-                if texto:
-                    lineas.append(texto)
-
-        # ---------------------------------------------------------
-        # CASO 2: JSON pb3 moderno
-        # ---------------------------------------------------------
-        elif text.startswith("{") and '"events"' in text:
-            try:
-                data = resp.json()
-                for ev in data.get("events", []):
-                    frase = ""
-                    for s in ev.get("segs", []):
-                        frase += s.get("utf8", "")
-                    frase = limpiar_basura(frase).strip()
-                    if frase:
-                        lineas.append(frase)
-            except Exception as e:
-                print("Error parseando subtítulos JSON:", e)
-                return "<p>❌ No se pudieron procesar subtítulos automáticos.</p>"
-
-        # ---------------------------------------------------------
-        # CASO 3: Otro formato desconocido
-        # ---------------------------------------------------------
-        else:
-            return "<p>❌ Formato de subtítulos no reconocido.</p>"
-
+        transcript_list = YouTubeTranscriptApi.get_transcript(
+            video_id,
+            languages=["es", "es-419", "es-ES", "es-LA", "en"]
+        )
+        lineas = [limpiar_basura(item["text"]) for item in transcript_list if item["text"].strip()]
         return _parrafos_html(lineas)
 
+    except TranscriptsDisabled:
+        return "<p>❌ Este video no tiene subtítulos disponibles.</p>"
+    except NoTranscriptFound:
+        return "<p>❌ No se encontraron subtítulos para este video.</p>"
     except Exception as e:
         print("Error al obtener subtítulos:", e)
         return "<p>❌ Error al procesar subtítulos.</p>"
+
+
+# -------------------------------------------------
+#   Obtener metadatos vía oEmbed (no bloqueado)
+# -------------------------------------------------
+def obtener_metadata(video_id):
+    url_oembed = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
+
+    try:
+        r = requests.get(url_oembed, timeout=5)
+        data = r.json()
+        titulo = data.get("title", "Título no disponible")
+        canal = data.get("author_name", "Canal no disponible")
+        return titulo, canal
+
+    except Exception as e:
+        print("Error metadatos oEmbed:", e)
+        return "Título no disponible", "Canal no disponible"
 
 
 # -------------------------------------------------
@@ -260,57 +191,10 @@ def procesar():
     if not video_id:
         return jsonify({"error": "URL inválida."}), 400
 
-    # -------------------------------------------------
-    # OBTENER METADATOS
-    # -------------------------------------------------
-    try:
-        # 🔥 OPCIONES CORREGIDAS (misma lógica)
-        ydl_opts = {
-            "quiet": True,
-            "skip_download": True,
-            "nocheckcertificate": True,
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["web", "default"]
-                }
-            },
-            "force_generic_extractor": True
-        }
+    titulo, canal = obtener_metadata(video_id)
 
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+    parrafos = obtener_subtitulos(video_id)
 
-        canal = info.get("uploader", "Canal no disponible").strip()
-        titulo = info.get("title", "Título no disponible").strip()
-        fecha_raw = info.get("upload_date")
-
-        if fecha_raw and len(fecha_raw) == 8:
-            year = fecha_raw[0:4]
-            month = int(fecha_raw[4:6])
-            day = int(fecha_raw[6:8])
-
-            meses = [
-                "enero","febrero","marzo","abril","mayo","junio",
-                "julio","agosto","septiembre","octubre","noviembre","diciembre"
-            ]
-            fecha_formateada = f"{year}, {day} de {meses[month-1]}"
-        else:
-            fecha_formateada = "s.f."
-
-    except Exception as e:
-        print("Error obteniendo metadatos con yt-dlp:", e)
-        canal = "Canal no disponible"
-        titulo = "Título no disponible"
-        fecha_formateada = "s.f."
-
-    # -------------------------------------------------
-    # Obtener subtítulos procesados
-    # -------------------------------------------------
-    parrafos = obtener_subtitulos(url)
-
-    # -------------------------------------------------
-    # Referencia APA
-    # -------------------------------------------------
     referencia_html = f"""
 <br>
 <div class="linkd40-video bg-blue-l2 d40-border-blue">
@@ -321,14 +205,11 @@ def procesar():
     </div>
 <div class="linkd40-video-s2">
     <p>Referencia:</p>
-    <p>{canal}. ({fecha_formateada}). <i>{titulo}</i> [Video]. YouTube.</p>
+    <p>{canal}. (s.f.). <i>{titulo}</i> [Video]. YouTube.</p>
 </div>
 </div>
 """
 
-    # -------------------------------------------------
-    # HTML final
-    # -------------------------------------------------
     html_result = f"""
 <iframe src="https://www.youtube.com/embed/{video_id}"
         title="{titulo}"
