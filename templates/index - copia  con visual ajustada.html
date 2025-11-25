@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Generador de Embebido y Transcripción</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Vincular los estilos institucionales -->
+  <link rel="stylesheet" href="http://contenidomoodle.s3.amazonaws.com/Distancia40/css/style_components.css">
+
+  <style>
+    /* Efecto visual del botón Copiar */
+    #copiar.copiado {
+      background-color: #16a34a !important; /* verde Tailwind-600 */
+    }
+    #copiar.copiado::after {
+      content: " ✅ Copiado";
+      margin-left: 0.4rem;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
+
+  <div class="bg-white shadow-lg rounded-xl p-8 max-w-3xl w-full">
+    <h1 class="text-2xl font-bold text-center mb-6 text-blue-700">
+      🎬 Generador de código HTML para videos de YouTube
+    </h1>
+
+    <!-- Campo de URL -->
+    <input id="url" type="text" placeholder="Pega la URL del video aquí..."
+           class="border rounded w-full p-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+
+    <!-- Botón principal -->
+    <button id="generar"
+            class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full transition">
+      Generar código HTML
+    </button>
+
+    <!-- Resultado -->
+    <div id="resultado" class="mt-6 hidden">
+      <h2 class="font-semibold mb-2">Código generado:</h2>
+
+      <div class="flex items-center justify-between mb-2">
+        <button id="copiar"
+                class="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-sm transition">
+          📋 Copiar código
+        </button>
+      </div>
+
+      <textarea id="codigo"
+                class="w-full h-60 border p-2 font-mono text-sm rounded bg-gray-50"
+                readonly></textarea>
+
+      <h3 class="font-semibold mt-6 mb-2">Vista previa:</h3>
+      <div id="preview" class="border rounded p-4 bg-gray-50"></div>
+    </div>
+  </div>
+
+  <script>
+    const generarBtn = document.getElementById('generar');
+    const copiarBtn = document.getElementById('copiar');
+    const resultado = document.getElementById('resultado');
+    const codigo = document.getElementById('codigo');
+    const preview = document.getElementById('preview');
+
+    generarBtn.addEventListener('click', async () => {
+      const url = document.getElementById('url').value.trim();
+      if (!url) return alert("Por favor, ingresa una URL.");
+
+      resultado.classList.remove('hidden');
+      codigo.value = "⏳ Procesando...";
+      preview.innerHTML = "<p class='text-gray-500'>Cargando transcripción...</p>";
+
+      try {
+        const res = await fetch('/procesar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+
+        const data = await res.json();
+
+        if (data.error) {
+          codigo.value = `❌ Error: ${data.error}`;
+          preview.innerHTML = `<p class='text-red-500'>${data.error}</p>`;
+        } else {
+          codigo.value = data.html;
+          preview.innerHTML = data.html;
+
+          // Re-inicializar los scripts institucionales para que los tabs/accordions funcionen
+          if (typeof initD40Components === "function") {
+            initD40Components();
+          }
+        }
+      } catch (err) {
+        codigo.value = "❌ Error al conectar con el servidor.";
+        preview.innerHTML = "<p class='text-red-500'>No se pudo conectar con el servidor Flask.</p>";
+      }
+    });
+
+    // --- Botón Copiar con animación visual ---
+    copiarBtn.addEventListener('click', () => {
+      codigo.select();
+      document.execCommand('copy');
+      copiarBtn.classList.add('copiado');
+      setTimeout(() => copiarBtn.classList.remove('copiado'), 1500);
+    });
+  </script>
+
+  <!-- Script institucional para tabs, accordions, etc. -->
+  <script src="https://contenidomoodle.s3.amazonaws.com/Distancia40/js/script_components.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Generador de Embebido y Transcripción</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center">
+  <div class="bg-white shadow-lg rounded-xl p-8 max-w-2xl w-full">
+    <h1 class="text-2xl font-bold text-center mb-6 text-blue-700">Generador de Código para Video YouTube</h1>
+
+    <input id="url" type="text" placeholder="Pega la URL del video aquí..." class="border rounded w-full p-2 mb-4">
+
+    <button id="generar" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full">Generar código HTML</button>
+
+    <div id="resultado" class="mt-6 hidden">
+      <h2 class="font-semibold mb-2">Código generado:</h2>
+      <textarea id="codigo" class="w-full h-80 border p-2 font-mono text-sm"></textarea>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('generar').addEventListener('click', async () => {
+      const url = document.getElementById('url').value.trim();
+      if (!url) return alert("Por favor, ingresa una URL.");
+
+      const res = await fetch('/procesar', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ url })
+      });
+
+      const data = await res.json();
+      if (data.error) {
+        alert(data.error);
+      } else {
+        document.getElementById('resultado').classList.remove('hidden');
+        document.getElementById('codigo').value = data.html;
+      }
+    });
+  </script>
+</body>
+</html>
