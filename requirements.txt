@@ -3,3 +3,4 @@ gunicorn==22.0.0
 youtube-transcript-api==1.2.3
 beautifulsoup4
 requests
+yt-dlp
